@@ -5,7 +5,7 @@ use File::Find::Rule;
 use base qw( File::Find::Rule );
 use vars qw( $VERSION @EXPORT );
 @EXPORT  = @File::Find::Rule::EXPORT;
-$VERSION = '1.1';
+$VERSION = '1.2';
 
 use Fcntl qw(:mode);
 
@@ -90,21 +90,28 @@ my %GroupnamesByGID = ();
 my %UIDinGID = ();
 
 # figure out who has what UID and which UIDs are in which group
-while(my($name, undef, $uid, $gid) = getpwent()) {
+while(my($name, undef, $uid, $gid) = &getpwent()) {
 	$UIDsByUsername{$name} = $uid;
 	$UsernamesByUID{$uid} = $name;
 	$UIDinGID{$gid}{$uid} = 1;
 }
-while(my($grname, $grpass, $gid, $members) = getgrent()) {
+while(my($grname, $grpass, $gid, $members) = &getgrent()) {
 	$GIDsByGroupname{$grname} = $gid;
 	$GroupnamesByGID{$gid} = $grname;
 	
 	foreach my $member (split(/\s+/, $members)) {
+		next unless(exists($UIDsByUsername{$member}));
 		$UIDinGID{$gid}{$UIDsByUsername{$member}} = 1;
 	}
 }
 
-# use Data::Dumper;die(Dumper(\%UIDinGID));
+# we override these in the test suite to avoid having to be root.
+# or we will do when that bit is written, anyway.
+
+sub stat { return CORE::stat(@_); }
+sub getpwent { return CORE::getpwent(); }
+sub getgrent { return CORE::getgrent(); }
+sub geteuid { return $>; }
 
 sub File::Find::Rule::permissions {
 	my $self = shift()->_force_object;
@@ -126,13 +133,13 @@ sub File::Find::Rule::permissions {
 		#   of being the file owner, of being in an appropriate group, or by
 		#   the file being world-(read|write|execute)able.  If a user *hasn't*
 		#   been specified, then we pretend one has anyway
-		$criteria{user} = $> unless(exists($criteria{user}));
+		$criteria{user} = geteuid() unless(exists($criteria{user}));
 		
 		if($criteria{user} =~ /^\d+$/) { $userid = $criteria{user}; }
 		 else { $userid = $UIDsByUsername{$criteria{user}}; }
 			
 		# now divine the user's permissions.  first get the file's mode bits and ownership
-		my($mode, $file_uid, $file_gid) = (stat($file))[2,4,5];
+		my($mode, $file_uid, $file_gid) = (&stat($file))[2,4,5];
 		
 		# mmmm, bit-twiddling
 		my $isReadable = $mode & (                 # set isReadable if the mode has ...
