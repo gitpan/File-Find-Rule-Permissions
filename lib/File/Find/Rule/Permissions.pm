@@ -5,7 +5,7 @@ use File::Find::Rule;
 use base qw( File::Find::Rule );
 use vars qw( $VERSION @EXPORT );
 @EXPORT  = @File::Find::Rule::EXPORT;
-$VERSION = '1.0';
+$VERSION = '1.1';
 
 use Fcntl qw(:mode);
 
@@ -150,6 +150,7 @@ sub File::Find::Rule::permissions {
 			(($userid == $file_uid) ? S_IXUSR : 0) |
 			($UIDinGID{$file_gid}{$userid} ? S_IXGRP : 0)
 		);
+		$isReadable = $isWriteable = 1 if($userid == 0); # root can read and write anything
 		
 		# Why do all those constants look like incantations to the elder gods?
 		#
